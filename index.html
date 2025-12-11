@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D JS 2-Player Tetris</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Import Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    
+    <!-- 3D Background Container -->
+    <div id="three-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+        <h1>2.5D Tetris - 2 Player</h1>
+
+        <div class="game-container">
+            <!-- Player 1 Info -->
+            <div class="player-info p1-hud">
+                <h2>Player 1 / AI 1</h2>
+                <div class="score-box">Score: <span id="score1">0</span></div>
+                <p>AI: <span id="autoModeDisplay1">OFF</span></p>
+                <p class="gamepad-status" id="p1-gp-status">GP: N/A</p>
+                <div id="gameOver1" class="game-over-message">GAME OVER</div>
+            </div>
+
+            <!-- Middle Info Area -->
+            <div class="center-info">
+                <p><strong>P</strong> to Pause</p>
+                <p><strong>H</strong> for Help</p>
+                <div id="pausedMessage" class="paused-message">PAUSED</div>
+            </div>
+
+            <!-- Player 2 Info -->
+            <div class="player-info p2-hud">
+                <h2>Player 2 / AI 2</h2>
+                <div class="score-box">Score: <span id="score2">0</span></div>
+                <p>AI: <span id="autoModeDisplay2">OFF</span></p>
+                <p class="gamepad-status" id="p2-gp-status">GP: N/A</p>
+                <div id="gameOver2" class="game-over-message">GAME OVER</div>
+            </div>
+        </div>
+
+        <!-- Help Button -->
+        <div class="bottom-bar">
+            <button id="help-trigger-button">Controls / Help</button>
+        </div>
+    </div>
+
+    <!-- Help Screen Overlay -->
+    <div id="help-screen" class="hidden">
+        <div class="help-content">
+            <h2>Controls & Help</h2>
+            <div class="help-grid">
+                <div class="controls-section">
+                    <h3>Player 1 (KB)</h3>
+                    <p><strong>Move:</strong> Arrows</p>
+                    <p><strong>Rotate:</strong> Up</p>
+                    <p><strong>Hard Drop:</strong> E</p>
+                    <p><strong>AI Toggle:</strong> T</p>
+                </div>
+                <div class="controls-section">
+                    <h3>Player 2 (KB)</h3>
+                    <p><strong>Move:</strong> WASD</p>
+                    <p><strong>Rotate:</strong> W</p>
+                    <p><strong>Hard Drop:</strong> R</p>
+                    <p><strong>AI Toggle:</strong> U</p>
+                </div>
+                <div class="controls-section">
+                    <h3>Gamepad</h3>
+                    <p><strong>Move:</strong> D-Pad/Stick</p>
+                    <p><strong>Rotate:</strong> A / X</p>
+                    <p><strong>Hard Drop:</strong> X / Square</p>
+                    <p>Press any button to assign.</p>
+                </div>
+            </div>
+            <button id="close-help-button">Close</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
