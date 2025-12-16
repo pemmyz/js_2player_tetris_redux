@@ -54,6 +54,11 @@ const gamepadInputState = {
 };
 const lastGamepadButtonState = { p1: [], p2: [] };
 
+// AI Delay
+let aiStartTimeout1 = null;
+let aiStartTimeout2 = null;
+const AI_START_DELAY_MS = 4000; // 4 seconds
+
 // ==========================================
 // PART 2: THREE.JS RENDERER SETUP
 // ==========================================
@@ -242,8 +247,11 @@ function init() {
 
     score1 = 0; score2 = 0; level1 = 1; level2 = 1;
     gameOver1 = false; gameOver2 = false; paused = false;
-    autoAlgorithmIndex1 = 7; // Default to Smart (Def) for P1
-    autoAlgorithmIndex2 = 0; // Default to OFF for P2
+    
+    // Default to OFF for both, AI will start after delay
+    autoAlgorithmIndex1 = 0; 
+    autoAlgorithmIndex2 = 0; 
+
     gameTickCounter = 0;
     lastMoveTime1 = 0; lastMoveTime2 = 0; lastFallTime1 = 0; lastFallTime2 = 0;
     keysPressed = {};
@@ -254,6 +262,22 @@ function init() {
     gameOverElement1.style.display = 'none';
     gameOverElement2.style.display = 'none';
     pausedElement.style.display = 'none';
+
+    // Start AI for P1 after delay
+    aiStartTimeout1 = setTimeout(() => {
+        if(autoAlgorithmIndex1 === 0) { // Only enable if player hasn't taken control
+            autoAlgorithmIndex1 = AUTO_ALGO_NAMES.indexOf("Smart (Bal)");
+            updateAutoModeDisplays();
+        }
+    }, AI_START_DELAY_MS);
+    
+    // Start AI for P2 after delay
+    aiStartTimeout2 = setTimeout(() => {
+        if(autoAlgorithmIndex2 === 0) { // Only enable if player hasn't taken control
+            autoAlgorithmIndex2 = AUTO_ALGO_NAMES.indexOf("Smart (Bal)");
+            updateAutoModeDisplays();
+        }
+    }, AI_START_DELAY_MS);
 
     requestAnimationFrame(gameLoop);
 }
@@ -322,6 +346,14 @@ function handleInput(currentTime) {
             if (currentTime - lastMoveTime1 > moveInterval) {
                 let moved = false;
                 const p1Gp = gamepadInputState.p1;
+                // Check for manual input to override AI start
+                if (keysPressed['arrowleft'] || keysPressed['arrowright'] || keysPressed['arrowdown'] || keysPressed['arrowup'] || keysPressed['e'] || p1Gp.left || p1Gp.right || p1Gp.down || (playerGamepadAssignments.p1 !== null && lastGamepadButtonState.p1[0]) || (playerGamepadAssignments.p1 !== null && lastGamepadButtonState.p1[2])) {
+                    if (aiStartTimeout1) {
+                        clearTimeout(aiStartTimeout1);
+                        aiStartTimeout1 = null;
+                    }
+                }
+
                 if ((keysPressed['arrowleft'] || p1Gp.left) && !checkCollision(grid1, currentPiece1, 0, -1)) { currentPiece1.col--; moved = true; }
                 if ((keysPressed['arrowright'] || p1Gp.right) && !checkCollision(grid1, currentPiece1, 0, 1)) { currentPiece1.col++; moved = true; }
                 if ((keysPressed['arrowdown'] || p1Gp.down) && !checkCollision(grid1, currentPiece1, 1, 0)) {
@@ -343,6 +375,14 @@ function handleInput(currentTime) {
             if (currentTime - lastMoveTime2 > moveInterval) {
                 let moved = false;
                 const p2Gp = gamepadInputState.p2;
+                // Check for manual input to override AI start
+                 if (keysPressed['a'] || keysPressed['d'] || keysPressed['s'] || keysPressed['w'] || keysPressed['r'] || p2Gp.left || p2Gp.right || p2Gp.down || (playerGamepadAssignments.p2 !== null && lastGamepadButtonState.p2[0]) || (playerGamepadAssignments.p2 !== null && lastGamepadButtonState.p2[2])) {
+                    if (aiStartTimeout2) {
+                        clearTimeout(aiStartTimeout2);
+                        aiStartTimeout2 = null;
+                    }
+                }
+
                 if ((keysPressed['a'] || p2Gp.left) && !checkCollision(grid2, currentPiece2, 0, -1)) { currentPiece2.col--; moved = true; }
                 if ((keysPressed['d'] || p2Gp.right) && !checkCollision(grid2, currentPiece2, 0, 1)) { currentPiece2.col++; moved = true; }
                 if ((keysPressed['s'] || p2Gp.down) && !checkCollision(grid2, currentPiece2, 1, 0)) {
@@ -614,7 +654,7 @@ function simulateHardDrop(initialGrid, piece) {
  * @param {object} piece The current falling piece.
  * @returns {object} An object with bestRotations, bestCol, and bestScore.
  */
-function calculateBestMove(grid, piece) {
+function calculateBestMove(grid, piece, currentAlgoIndex) {
     let bestScore = -Infinity;
     let bestRotations = 0;
     let bestCol = 0;
@@ -626,30 +666,21 @@ function calculateBestMove(grid, piece) {
         }
 
         // Test all possible column placements for this rotation
-        // The piece's `col` can range from a negative value (off-screen left)
-        // to `GRID_COLS - getShapeWidth(piece.shape)`
         for (let c = -getShapeWidth(rotatedPiece.shape); c < GRID_COLS; c++) {
             let testPiece = { ...rotatedPiece, row: 0, col: c };
 
-            // Check if piece is valid at this column and rotation
-            // We need to temporarily set its row to a valid position to check
-            // collision, then find the actual drop row.
-            
             // First, try to place it at row 0 (or slightly negative if it spawns high)
             // If it collides at row 0, it's not a valid starting position
-            if (checkCollision(grid, testPiece, 0, 0)) {
-                // Adjust for pieces that spawn partially above the grid
-                let foundValidStart = false;
-                for(let startRow = 0; startRow >= -getShapeHeight(testPiece.shape); startRow--) {
-                    let tempTestPiece = {...testPiece, row: startRow};
-                    if(!checkCollision(grid, tempTestPiece, 0, 0)) {
-                        testPiece.row = startRow;
-                        foundValidStart = true;
-                        break;
-                    }
+            let foundValidStart = false;
+            for(let startRow = 0; startRow >= -getShapeHeight(testPiece.shape); startRow--) {
+                let tempTestPiece = {...testPiece, row: startRow};
+                if(!checkCollision(grid, tempTestPiece, 0, 0)) {
+                    testPiece.row = startRow;
+                    foundValidStart = true;
+                    break;
                 }
-                if (!foundValidStart) continue; // Cannot place this rotation/column combination at all
             }
+            if (!foundValidStart) continue; // Cannot place this rotation/column combination at all
 
 
             // Simulate hard drop and evaluate the resulting board
@@ -659,17 +690,15 @@ function calculateBestMove(grid, piece) {
             // Add score for lines cleared
             currentScore += simulatedResult.linesCleared * 1000; // Large reward for lines cleared
 
-            // Implement different AI personalities
-            if (autoAlgorithmIndex1 === 6 || autoAlgorithmIndex2 === 6) { // Smart (Offensive)
-                // Offensive AI prioritizes lines cleared, less concern for holes/height
-                currentScore += simulatedResult.linesCleared * 5000;
-                currentScore -= evaluateBoard(simulatedResult.grid) * 0.5; // Less penalty for bad board state
-            } else if (autoAlgorithmIndex1 === 7 || autoAlgorithmIndex2 === 7) { // Smart (Defensive)
-                // Defensive AI prioritizes a flat board and avoiding holes
+            // Implement different AI personalities based on currentAlgoIndex
+            if (currentAlgoIndex === AUTO_ALGO_NAMES.indexOf("Smart (Off)")) { // Smart (Offensive)
+                currentScore += simulatedResult.linesCleared * 5000; // Even higher reward for lines
+                currentScore -= evaluateBoard(simulatedResult.grid) * 0.5; // Less penalty for board state
+            } else if (currentAlgoIndex === AUTO_ALGO_NAMES.indexOf("Smart (Def)")) { // Smart (Defensive)
                 currentScore += simulatedResult.linesCleared * 2000;
-                currentScore -= evaluateBoard(simulatedResult.grid) * 1.5; // More penalty for bad board state
+                currentScore -= evaluateBoard(simulatedResult.grid) * 1.5; // More penalty for board state
             }
-
+            // Smart (Bal) uses the default heuristic weights
 
             if (currentScore > bestScore) {
                 bestScore = currentScore;
@@ -684,7 +713,7 @@ function calculateBestMove(grid, piece) {
 
 function smartAiMove(grid, piece, currentTime, lastMoveTime, moveSpeed, fallTime, algo) {
     if (!piece.smartTargetComputed) {
-        const { bestRotations, bestCol } = calculateBestMove(grid, piece);
+        const { bestRotations, bestCol } = calculateBestMove(grid, piece, algo);
         piece.smartTargetRotations = bestRotations;
         piece.smartTargetCol = bestCol;
         piece.smartTargetComputed = true;
@@ -760,6 +789,25 @@ function processGamepad(pIdx, pad, time) {
     const grid = pIdx===1?grid1:grid2;
     const piece = pIdx===1?currentPiece1:currentPiece2;
 
+    // Detect any gamepad input to turn off AI for that player
+    if (pIdx === 1 && autoAlgorithmIndex1 !== 0) {
+        if (pad.buttons.some(b => b.pressed) || pad.axes.some(a => Math.abs(a) > 0.1)) {
+            if (aiStartTimeout1) { clearTimeout(aiStartTimeout1); aiStartTimeout1 = null; }
+            autoAlgorithmIndex1 = 0; // Set to manual control
+            currentPiece1.smartTargetComputed = false;
+            updateAutoModeDisplays();
+        }
+    }
+    if (pIdx === 2 && autoAlgorithmIndex2 !== 0) {
+         if (pad.buttons.some(b => b.pressed) || pad.axes.some(a => Math.abs(a) > 0.1)) {
+            if (aiStartTimeout2) { clearTimeout(aiStartTimeout2); aiStartTimeout2 = null; }
+            autoAlgorithmIndex2 = 0; // Set to manual control
+            currentPiece2.smartTargetComputed = false;
+            updateAutoModeDisplays();
+        }
+    }
+
+
     // Rotate (A=0)
     if(pad.buttons[0]?.pressed && !btnState[0]) tryRotate(grid, piece);
     // Hard Drop (X=2)
@@ -800,13 +848,16 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
+    // Check for manual input on 't' and 'u' to override delayed AI
     if (key === 't') { 
+        if (aiStartTimeout1) { clearTimeout(aiStartTimeout1); aiStartTimeout1 = null; }
         autoAlgorithmIndex1 = (autoAlgorithmIndex1 + 1) % AUTO_ALGO_NAMES.length; 
         currentPiece1.smartTargetComputed = false; // Reset AI target on mode change
         updateAutoModeDisplays(); 
         return; 
     }
     if (key === 'u') { 
+        if (aiStartTimeout2) { clearTimeout(aiStartTimeout2); aiStartTimeout2 = null; }
         autoAlgorithmIndex2 = (autoAlgorithmIndex2 + 1) % AUTO_ALGO_NAMES.length; 
         currentPiece2.smartTargetComputed = false; // Reset AI target on mode change
         updateAutoModeDisplays(); 
@@ -817,6 +868,22 @@ document.addEventListener('keydown', (e) => {
 
     const t = performance.now();
     keysPressed[key] = true;
+
+    // Player 1 manual input to disable AI
+    if ((key === 'arrowleft' || key === 'arrowright' || key === 'arrowdown' || key === 'arrowup' || key === 'e') && autoAlgorithmIndex1 !== 0) {
+        if (aiStartTimeout1) { clearTimeout(aiStartTimeout1); aiStartTimeout1 = null; }
+        autoAlgorithmIndex1 = 0; // Set to manual control
+        currentPiece1.smartTargetComputed = false;
+        updateAutoModeDisplays();
+    }
+    // Player 2 manual input to disable AI
+    if ((key === 'a' || key === 'd' || key === 's' || key === 'w' || key === 'r') && autoAlgorithmIndex2 !== 0) {
+        if (aiStartTimeout2) { clearTimeout(aiStartTimeout2); aiStartTimeout2 = null; }
+        autoAlgorithmIndex2 = 0; // Set to manual control
+        currentPiece2.smartTargetComputed = false;
+        updateAutoModeDisplays();
+    }
+
 
     if (key === 'arrowup' && !gameOver1) tryRotate(grid1, currentPiece1);
     if (key === 'w' && !gameOver2) tryRotate(grid2, currentPiece2);
