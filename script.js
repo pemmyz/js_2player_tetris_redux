@@ -45,6 +45,10 @@ let keysPressed = {};
 let gameTickCounter = 0;
 let wasPausedBeforeHelp = false;
 
+// Game Over / Restart Timing
+let gameOverTime1 = 0;
+let gameOverTime2 = 0;
+
 // Gamepad State
 let playerGamepadAssignments = { p1: null, p2: null };
 const gamepadAssignmentCooldown = {};
@@ -294,8 +298,17 @@ function gameLoop(currentTime) {
     handleInput(currentTime);
 
     if (!paused) {
-        if (!gameOver1) updatePlayer(1, currentTime, grid1, currentPiece1, (p) => currentPiece1 = p);
-        if (!gameOver2) updatePlayer(2, currentTime, grid2, currentPiece2, (p) => currentPiece2 = p);
+        if (!gameOver1) {
+            updatePlayer(1, currentTime, grid1, currentPiece1, (p) => currentPiece1 = p);
+        } else {
+            handleGameOverCountdown(1, currentTime);
+        }
+
+        if (!gameOver2) {
+            updatePlayer(2, currentTime, grid2, currentPiece2, (p) => currentPiece2 = p);
+        } else {
+            handleGameOverCountdown(2, currentTime);
+        }
     }
 
     // RENDER 3D
@@ -304,6 +317,52 @@ function gameLoop(currentTime) {
     renderer.render(scene, camera);
 
     requestAnimationFrame(gameLoop);
+}
+
+// Logic for Countdown and Reset
+function handleGameOverCountdown(pIdx, currentTime) {
+    const startTime = pIdx === 1 ? gameOverTime1 : gameOverTime2;
+    const elapsed = currentTime - startTime;
+    const el = pIdx === 1 ? gameOverElement1 : gameOverElement2;
+
+    if (elapsed < 3000) {
+        // Countdown
+        let num = 3 - Math.floor(elapsed / 1000);
+        el.textContent = num;
+    } else {
+        // Reset
+        resetPlayer(pIdx);
+    }
+}
+
+function resetPlayer(pIdx) {
+    if (pIdx === 1) {
+        grid1 = createGrid(GRID_ROWS, GRID_COLS);
+        score1 = 0;
+        level1 = 1;
+        gameOver1 = false;
+        gameOverElement1.style.display = 'none';
+        updateScoreDisplays();
+        
+        // Spawn new piece
+        currentPiece1 = createTetrimino();
+        if (currentPiece1) currentPiece1.col = Math.floor(GRID_COLS / 2) - Math.floor(getShapeWidth(currentPiece1.shape) / 2);
+        lastFallTime1 = performance.now();
+        lastMoveTime1 = performance.now();
+    } else {
+        grid2 = createGrid(GRID_ROWS, GRID_COLS);
+        score2 = 0;
+        level2 = 1;
+        gameOver2 = false;
+        gameOverElement2.style.display = 'none';
+        updateScoreDisplays();
+        
+        // Spawn new piece
+        currentPiece2 = createTetrimino();
+        if (currentPiece2) currentPiece2.col = Math.floor(GRID_COLS / 2) - Math.floor(getShapeWidth(currentPiece2.shape) / 2);
+        lastFallTime2 = performance.now();
+        lastMoveTime2 = performance.now();
+    }
 }
 
 // Refactored Update Logic per Player to reduce duplication
@@ -334,8 +393,22 @@ function updatePlayer(pIdx, currentTime, grid, piece, setPiece) {
 }
 
 function triggerGameOver(pNum) {
-    if(pNum === 1) { gameOver1 = true; gameOverElement1.style.display = 'block'; }
-    else { gameOver2 = true; gameOverElement2.style.display = 'block'; }
+    // Reset Score to 0 immediately
+    if(pNum === 1) { 
+        score1 = 0;
+        updateScoreDisplays();
+        gameOver1 = true; 
+        gameOverElement1.style.display = 'block';
+        gameOverElement1.textContent = "3"; // Initial text
+        gameOverTime1 = performance.now();
+    } else { 
+        score2 = 0;
+        updateScoreDisplays();
+        gameOver2 = true; 
+        gameOverElement2.style.display = 'block';
+        gameOverElement2.textContent = "3"; // Initial text
+        gameOverTime2 = performance.now();
+    }
 }
 
 // --- Input Handling ---

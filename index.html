@@ -24,7 +24,6 @@
                 <div class="score-box">Score: <span id="score1">0</span></div>
                 <p>AI: <span id="autoModeDisplay1">OFF</span></p>
                 <p class="gamepad-status" id="p1-gp-status">GP: N/A</p>
-                <div id="gameOver1" class="game-over-message">GAME OVER</div>
             </div>
 
             <!-- Middle Info Area -->
@@ -40,8 +39,13 @@
                 <div class="score-box">Score: <span id="score2">0</span></div>
                 <p>AI: <span id="autoModeDisplay2">OFF</span></p>
                 <p class="gamepad-status" id="p2-gp-status">GP: N/A</p>
-                <div id="gameOver2" class="game-over-message">GAME OVER</div>
             </div>
+        </div>
+
+        <!-- Overlays for Countdown/Game Over positioned over 3D areas -->
+        <div id="play-area-overlays">
+            <div id="gameOver1" class="overlay-text p1-overlay">3</div>
+            <div id="gameOver2" class="overlay-text p2-overlay">3</div>
         </div>
 
         <!-- Help Button -->
