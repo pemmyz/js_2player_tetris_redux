@@ -67,17 +67,18 @@ class Tetris3DView {
         sceneRoot.add(this.root);
 
         // Grid backing (The board container)
-        const frameGeo = new THREE.BoxGeometry(GRID_COLS + 1, GRID_ROWS + 1, 1);
+        const frameGeo = new THREE.BoxGeometry(GRID_COLS + 0.1, GRID_ROWS + 0.1, 1); // Slightly larger
         const frameMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
         const frame = new THREE.Mesh(frameGeo, frameMat);
         frame.position.set((GRID_COLS/2) - 0.5, (GRID_ROWS/2) - 0.5, -1);
         frame.receiveShadow = true;
         this.root.add(frame);
         
-        // Grid Lines (Visual Helper)
+        // Grid Lines (Visual Helper) - Adjusted for full coverage
         const gridHelper = new THREE.GridHelper(GRID_COLS, GRID_COLS, 0x333333, 0x333333);
         gridHelper.rotation.x = Math.PI / 2;
         gridHelper.position.set((GRID_COLS/2) - 0.5, (GRID_ROWS/2) - 0.5, -0.49);
+        // Scale Y to match GRID_ROWS
         gridHelper.scale.set(1, GRID_ROWS/GRID_COLS, 1);
         this.root.add(gridHelper);
 
@@ -241,7 +242,8 @@ function init() {
 
     score1 = 0; score2 = 0; level1 = 1; level2 = 1;
     gameOver1 = false; gameOver2 = false; paused = false;
-    autoAlgorithmIndex1 = 0; autoAlgorithmIndex2 = 0;
+    autoAlgorithmIndex1 = 7; // Default to Smart (Def) for P1
+    autoAlgorithmIndex2 = 0; // Default to OFF for P2
     gameTickCounter = 0;
     lastMoveTime1 = 0; lastMoveTime2 = 0; lastFallTime1 = 0; lastFallTime2 = 0;
     keysPressed = {};
@@ -360,8 +362,32 @@ function handleInput(currentTime) {
 // --- Logic Helpers ---
 function createGrid(rows, cols) { return Array.from({ length: rows }, () => Array(cols).fill(0)); }
 function getRandomElement(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function getShapeWidth(shape) { return shape[0].length; }
-function getShapeHeight(shape) { return shape.length; }
+function getShapeWidth(shape) { 
+    if (!shape || shape.length === 0) return 0;
+    let minC = GRID_COLS, maxC = -1;
+    shape.forEach((row, r) => {
+        row.forEach((cell, c) => {
+            if (cell) {
+                minC = Math.min(minC, c);
+                maxC = Math.max(maxC, c);
+            }
+        });
+    });
+    return maxC - minC + 1;
+}
+function getShapeHeight(shape) { 
+    if (!shape || shape.length === 0) return 0;
+    let minR = GRID_ROWS, maxR = -1;
+    shape.forEach((row, r) => {
+        row.forEach((cell, c) => {
+            if (cell) {
+                minR = Math.min(minR, r);
+                maxR = Math.max(maxR, r);
+            }
+        });
+    });
+    return maxR - minR + 1;
+}
 
 function createTetrimino() {
     const blueprintShape = getRandomElement(SHAPES);
@@ -372,21 +398,29 @@ function createTetrimino() {
 
 function rotateSinglePiece(piece) {
     const shape = piece.shape;
-    const N = shape.length; // Assuming square matrices for rotation logic usually, or padded
+    const N = shape.length; 
     if(!N) return piece.shape;
-    // Standard rotation logic
     const M = shape[0].length;
-    // Transpose then reverse
-    const rotated = shape[0].map((val, index) => shape.map(row => row[index]).reverse());
+    const rotated = Array.from({length: M}, () => Array(N).fill(0));
+
+    for (let r = 0; r < N; r++) {
+        for (let c = 0; c < M; c++) {
+            rotated[c][N - 1 - r] = shape[r][c];
+        }
+    }
     return rotated;
 }
 // Helper to rotate active piece safely
 function tryRotate(grid, piece) {
     if (!piece || !piece.shape) return;
     const oldShape = piece.shape;
-    const newShape = rotateSinglePiece(piece);
     const oldCol = piece.col;
     
+    let newShape = oldShape;
+    for(let i=0; i<1; i++) { // Only one rotation attempt for manual control
+        newShape = rotateSinglePiece({shape: newShape}).slice();
+    }
+
     // Test basic rotation
     piece.shape = newShape;
     if(!checkCollision(grid, piece, 0, 0)) {
@@ -474,7 +508,7 @@ function updateAutoModeDisplays() {
     autoModeElement2.textContent = AUTO_ALGO_NAMES[autoAlgorithmIndex2];
 }
 
-// --- AI Logic (Abbreviated for brevity, reusing structure) ---
+// --- AI Logic ---
 function autoPlayMove(grid, piece, currentTime, lastMoveTime, moveSpeed, algoIdx) {
     if (currentTime - lastMoveTime > moveSpeed) {
         let moved = false;
@@ -494,14 +528,199 @@ function autoPlayMove(grid, piece, currentTime, lastMoveTime, moveSpeed, algoIdx
     return lastMoveTime;
 }
 
-// Smart AI placeholder (Full implementation requires heavy heuristic function from previous context)
-// Implementing a simplified random choice for 'Smart' to keep code size manageable for this view conversion
-// or retain the logic if full code is needed.
-function smartAiMove(grid, piece, t, lastT, speed, fallT, algo) {
-    // Re-implementation of the heuristic approach is identical to the 2D version 
-    // but omitted here for file length. Using 'Random' behavior as fallback for this demo snippet.
-    return { newLastMoveTime: autoPlayMove(grid, piece, t, lastT, speed, 4) };
+
+/**
+ * Calculates a heuristic score for a given board state.
+ * @param {Array<Array<number>>} board The game grid.
+ * @returns {number} The heuristic score. Lower is better.
+ */
+function evaluateBoard(board) {
+    let score = 0;
+    let maxHeight = 0;
+    let holes = 0;
+    let bumpiness = 0;
+    let heights = Array(GRID_COLS).fill(0);
+
+    for (let c = 0; c < GRID_COLS; c++) {
+        let colHeight = 0;
+        let foundBlock = false;
+        for (let r = 0; r < GRID_ROWS; r++) {
+            if (board[r][c] !== 0) {
+                if (!foundBlock) {
+                    colHeight = GRID_ROWS - r;
+                    foundBlock = true;
+                }
+            } else if (foundBlock) {
+                holes++; // Found a hole beneath a block
+            }
+        }
+        heights[c] = colHeight;
+        maxHeight = Math.max(maxHeight, colHeight);
+    }
+
+    // Calculate bumpiness
+    for (let c = 0; c < GRID_COLS - 1; c++) {
+        bumpiness += Math.abs(heights[c] - heights[c + 1]);
+    }
+
+    // Weights for the heuristic components (can be tuned)
+    const WEIGHT_HEIGHT = -0.5;
+    const WEIGHT_LINES = 1.0; // Lines cleared are handled separately when scoring
+    const WEIGHT_HOLES = -1.0;
+    const WEIGHT_BUMPINESS = -0.2;
+
+    score += maxHeight * WEIGHT_HEIGHT;
+    score += holes * WEIGHT_HOLES;
+    score += bumpiness * WEIGHT_BUMPINESS;
+
+    return score;
 }
+
+/**
+ * Simulates hard dropping a piece onto a grid.
+ * @param {Array<Array<number>>} initialGrid The grid before dropping.
+ * @param {object} piece The piece to drop (with its current shape, row, col).
+ * @returns {object} An object containing the new grid and lines cleared.
+ */
+function simulateHardDrop(initialGrid, piece) {
+    let tempGrid = initialGrid.map(row => [...row]); // Deep copy
+    let tempPiece = { ...piece };
+
+    // Find the final row after hard drop
+    while (!checkCollision(tempGrid, tempPiece, 1, 0)) {
+        tempPiece.row++;
+    }
+
+    // Merge the piece into the temporary grid
+    mergeTetrimino(tempGrid, tempPiece);
+
+    // Clear lines and get count
+    let linesCleared = 0;
+    for (let r = GRID_ROWS - 1; r >= 0; ) {
+        if (tempGrid[r].every(cell => cell !== 0)) {
+            tempGrid.splice(r, 1);
+            tempGrid.unshift(Array(GRID_COLS).fill(0));
+            linesCleared++;
+        } else {
+            r--;
+        }
+    }
+    return { grid: tempGrid, linesCleared: linesCleared };
+}
+
+/**
+ * Calculates the best move (rotation and column) for the current piece.
+ * @param {Array<Array<number>>} grid The current game grid.
+ * @param {object} piece The current falling piece.
+ * @returns {object} An object with bestRotations, bestCol, and bestScore.
+ */
+function calculateBestMove(grid, piece) {
+    let bestScore = -Infinity;
+    let bestRotations = 0;
+    let bestCol = 0;
+
+    for (let r = 0; r < 4; r++) { // Iterate through 0 to 3 rotations
+        let rotatedPiece = { ...piece, shape: piece.shape };
+        for (let i = 0; i < r; i++) {
+            rotatedPiece.shape = rotateSinglePiece(rotatedPiece);
+        }
+
+        // Test all possible column placements for this rotation
+        // The piece's `col` can range from a negative value (off-screen left)
+        // to `GRID_COLS - getShapeWidth(piece.shape)`
+        for (let c = -getShapeWidth(rotatedPiece.shape); c < GRID_COLS; c++) {
+            let testPiece = { ...rotatedPiece, row: 0, col: c };
+
+            // Check if piece is valid at this column and rotation
+            // We need to temporarily set its row to a valid position to check
+            // collision, then find the actual drop row.
+            
+            // First, try to place it at row 0 (or slightly negative if it spawns high)
+            // If it collides at row 0, it's not a valid starting position
+            if (checkCollision(grid, testPiece, 0, 0)) {
+                // Adjust for pieces that spawn partially above the grid
+                let foundValidStart = false;
+                for(let startRow = 0; startRow >= -getShapeHeight(testPiece.shape); startRow--) {
+                    let tempTestPiece = {...testPiece, row: startRow};
+                    if(!checkCollision(grid, tempTestPiece, 0, 0)) {
+                        testPiece.row = startRow;
+                        foundValidStart = true;
+                        break;
+                    }
+                }
+                if (!foundValidStart) continue; // Cannot place this rotation/column combination at all
+            }
+
+
+            // Simulate hard drop and evaluate the resulting board
+            let simulatedResult = simulateHardDrop(grid, testPiece);
+            let currentScore = evaluateBoard(simulatedResult.grid);
+
+            // Add score for lines cleared
+            currentScore += simulatedResult.linesCleared * 1000; // Large reward for lines cleared
+
+            // Implement different AI personalities
+            if (autoAlgorithmIndex1 === 6 || autoAlgorithmIndex2 === 6) { // Smart (Offensive)
+                // Offensive AI prioritizes lines cleared, less concern for holes/height
+                currentScore += simulatedResult.linesCleared * 5000;
+                currentScore -= evaluateBoard(simulatedResult.grid) * 0.5; // Less penalty for bad board state
+            } else if (autoAlgorithmIndex1 === 7 || autoAlgorithmIndex2 === 7) { // Smart (Defensive)
+                // Defensive AI prioritizes a flat board and avoiding holes
+                currentScore += simulatedResult.linesCleared * 2000;
+                currentScore -= evaluateBoard(simulatedResult.grid) * 1.5; // More penalty for bad board state
+            }
+
+
+            if (currentScore > bestScore) {
+                bestScore = currentScore;
+                bestRotations = r;
+                bestCol = c;
+            }
+        }
+    }
+    return { bestRotations, bestCol, bestScore };
+}
+
+
+function smartAiMove(grid, piece, currentTime, lastMoveTime, moveSpeed, fallTime, algo) {
+    if (!piece.smartTargetComputed) {
+        const { bestRotations, bestCol } = calculateBestMove(grid, piece);
+        piece.smartTargetRotations = bestRotations;
+        piece.smartTargetCol = bestCol;
+        piece.smartTargetComputed = true;
+    }
+
+    if (currentTime - lastMoveTime > moveSpeed) {
+        let moved = false;
+
+        // Apply rotations
+        if (piece.smartTargetRotations > 0) {
+            piece.shape = rotateSinglePiece(piece);
+            piece.smartTargetRotations--;
+            moved = true;
+        } 
+        // Move horizontally
+        else if (piece.col !== piece.smartTargetCol) {
+            if (piece.col < piece.smartTargetCol && !checkCollision(grid, piece, 0, 1)) {
+                piece.col++;
+                moved = true;
+            } else if (piece.col > piece.smartTargetCol && !checkCollision(grid, piece, 0, -1)) {
+                piece.col--;
+                moved = true;
+            }
+        } else {
+            // Once in position, hard drop
+            hardDrop(piece === currentPiece1 ? 1 : 2, currentTime);
+            moved = true; // Signifies that the AI has completed its turn
+            // Reset for next piece
+            piece.smartTargetComputed = false;
+        }
+
+        if (moved) return { newLastMoveTime: currentTime };
+    }
+    return { newLastMoveTime: lastMoveTime };
+}
+
 
 // --- Gamepad ---
 function pollGamepads(currentTime) {
@@ -581,8 +800,18 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    if (key === 't') { autoAlgorithmIndex1 = (autoAlgorithmIndex1 + 1) % AUTO_ALGO_NAMES.length; updateAutoModeDisplays(); return; }
-    if (key === 'u') { autoAlgorithmIndex2 = (autoAlgorithmIndex2 + 1) % AUTO_ALGO_NAMES.length; updateAutoModeDisplays(); return; }
+    if (key === 't') { 
+        autoAlgorithmIndex1 = (autoAlgorithmIndex1 + 1) % AUTO_ALGO_NAMES.length; 
+        currentPiece1.smartTargetComputed = false; // Reset AI target on mode change
+        updateAutoModeDisplays(); 
+        return; 
+    }
+    if (key === 'u') { 
+        autoAlgorithmIndex2 = (autoAlgorithmIndex2 + 1) % AUTO_ALGO_NAMES.length; 
+        currentPiece2.smartTargetComputed = false; // Reset AI target on mode change
+        updateAutoModeDisplays(); 
+        return; 
+    }
 
     if(paused) return;
 
