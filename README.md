@@ -7,6 +7,9 @@ This project reimagines classic competitive Tetris with **side‑by‑side 3D bo
 
 ---
 
+## Screenshots
+![Game 1](screenshots/game_1.png)
+
 ## 🎮 Gameplay Overview
 
 The game features two completely independent Tetris boards rendered in 3D using Three.js.  
