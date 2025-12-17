@@ -9,6 +9,7 @@ This project reimagines classic competitive Tetris with **side‑by‑side 3D bo
 
 ## Screenshots
 ![Game 1](screenshots/game_1.png)
+![Game 2](screenshots/game_2.png)
 
 ## 🎮 Gameplay Overview
 
