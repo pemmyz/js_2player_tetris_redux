@@ -5,6 +5,8 @@
 A fully browser‑based **two‑player Tetris variant** built using **Three.js** for 2.5D rendering and vanilla JavaScript for gameplay logic, input handling, gamepad support, and AI control.  
 This project reimagines classic competitive Tetris with **side‑by‑side 3D boards**, smooth lighting, shadows, animation, and optional AI opponents for both boards.
 
+## Play it now: https://pemmyz.github.io/js_2player_tetris_redux/
+
 ---
 
 ## Screenshots
