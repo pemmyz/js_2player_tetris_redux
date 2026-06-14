@@ -177,14 +177,17 @@ function initThreeJS() {
     // Add some fog for depth
     scene.fog = new THREE.Fog(0x111111, 20, 60);
 
-    // Camera
-    const aspect = window.innerWidth / window.innerHeight;
+    // Camera (Lock to the 960x720 scaled resolution instead of window.innerWidth)
+    const baseWidth = 960;
+    const baseHeight = 720;
+    const aspect = baseWidth / baseHeight;
     camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
     camera.position.set(0, 0, 35); // Look from center
 
     // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    // Keep internal resolution fixed, let CSS wrapper scale it
+    renderer.setSize(baseWidth, baseHeight);
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
@@ -222,13 +225,6 @@ function initThreeJS() {
     floor.position.y = -11; // Just below the boards
     floor.receiveShadow = true;
     scene.add(floor);
-
-    // Handle Resize
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
 }
 
 
@@ -957,7 +953,6 @@ document.addEventListener('keydown', (e) => {
         updateAutoModeDisplays();
     }
 
-
     if (key === 'arrowup' && !gameOver1) tryRotate(grid1, currentPiece1);
     if (key === 'w' && !gameOver2) tryRotate(grid2, currentPiece2);
     if (key === 'e') hardDrop(1, t);
@@ -969,5 +964,94 @@ document.addEventListener('keyup', (e) => delete keysPressed[e.key.toLowerCase()
 helpTriggerButton.addEventListener('click', () => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'h'})));
 closeHelpButton.addEventListener('click', () => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'h'})));
 
-// Start
-document.addEventListener('DOMContentLoaded', init);
+
+// ==========================================
+// PART 4: MOBILE & FULLSCREEN SCALING LOGIC
+// ==========================================
+
+const mobileToggleBtn = document.getElementById('mobile-btn');
+const mobileControls = document.getElementById('mobile-controls');
+const screenElement = document.getElementById("screen");
+
+// --- 1. SCALING LOGIC ---
+function scaleGame() {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    
+    // Core logical boundaries (Fixed aspect ratio 4:3)
+    const baseWidth = 960;
+    const baseHeight = 720;
+    
+    // Scale up/down strictly ensuring no cutoff 
+    const scale = Math.min(
+        window.innerWidth / baseWidth,
+        window.innerHeight / baseHeight
+    );
+    
+    screenElement.style.transform = `scale(${scale})`;
+    
+    if (isFullscreen) {
+        document.body.classList.add('mobile-mode'); // Activates CSS lock & controls
+    } else {
+        document.body.classList.remove('mobile-mode');
+    }
+}
+
+// --- 2. FULLSCREEN TRIGGER ---
+function goFull() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+}
+
+window.addEventListener("resize", scaleGame);
+window.addEventListener("fullscreenchange", scaleGame);
+window.addEventListener("webkitfullscreenchange", scaleGame);
+
+// Button Listener
+mobileToggleBtn.addEventListener('click', goFull);
+
+// --- 3. MOBILE CONTROLS LOGIC ---
+function setupMobileControls() {
+    if (!mobileControls) return;
+
+    // Dispatch Native Keyboard events matching game loop requirements
+    const addControlListener = (elementId, key) => {
+        const element = document.getElementById(elementId);
+        if(!element) return;
+        
+        const pressKey = (e) => {
+            if(e.cancelable) e.preventDefault(); 
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: key }));
+        };
+        const releaseKey = (e) => {
+            if(e.cancelable) e.preventDefault();
+            document.dispatchEvent(new KeyboardEvent('keyup', { key: key }));
+        };
+
+        // Touch Events
+        element.addEventListener('touchstart', pressKey, { passive: false });
+        element.addEventListener('touchend', releaseKey, { passive: false });
+        element.addEventListener('touchcancel', releaseKey, { passive: false });
+        
+        // Mouse Events
+        element.addEventListener('mousedown', pressKey);
+        element.addEventListener('mouseup', releaseKey);
+        element.addEventListener('mouseleave', (e) => {
+            if (e.buttons === 1) { releaseKey(e); }
+        });
+    };
+
+    // Map Buttons to Player 1 keys inherently
+    addControlListener('mobile-left', 'ArrowLeft');
+    addControlListener('mobile-right', 'ArrowRight');
+    addControlListener('mobile-down', 'ArrowDown'); // Soft drop
+    addControlListener('mobile-up', 'ArrowUp');     // Rotate
+    addControlListener('mobile-drop', 'e');         // Hard drop
+}
+
+// Start sequence
+document.addEventListener('DOMContentLoaded', () => {
+    init(); // Fire core framework
+    scaleGame(); // Apply immediate initial scale calculation
+    setupMobileControls(); // Setup on-screen mappings
+});
